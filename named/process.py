@@ -4,16 +4,23 @@
 ############
 # Imports. #
 ############
+import sys
+sys.path.append('/usr/local/lib/python2.7/dist-packages/pyndn')
 import socket
 import time
-import pyccn
+import pyndn
+from pyndn import Face
+from pyndn import Name
+from pyndn import Data
+from pyndn.security import KeyChain
 import multiprocessing
 from collections import defaultdict
+import datetime
 
 ################################################
 # Delcaring and initializing needed variables. #
 ################################################
-localdir = '/home/ndnuser/ndn-status/named'
+localdir = '/home/ndnuser/named'
 
 links_list = []
 publish = []
@@ -34,46 +41,60 @@ def lookup(host, q):
 	q.put(socket.gethostbyaddr(host))
 
 ###################################
-# PyCCN Class to publish content. #
+# pyndn Class to publish content. #
 ###################################
 
-class ccnput(pyccn.Closure):
-        def __init__(self, name, content):
-                c = pyccn.CCN()
-		c.setRunTimeout(60000)
-		self.handle = c
-		#self.handle = pyccn.CCN()
-                self.name = pyccn.Name(name)
-                self.content = self.prepareContent(content, self.handle.getDefaultKey())
-		self.handle.put(self.content)
+def dump(*list):
+    result = ""
+    for element in list:
+        result += (element if type(element) is str else repr(element)) + " "
+    print(result)
 
-        def prepareContent(self, content, key):
-                co = pyccn.ContentObject()
-                co.name = self.name.appendVersion().appendSegment(0)
-                co.content = content
+class Echo(object):
+    def __init__(self, keyChain, certificateName, data):
+        self._keyChain = keyChain
+        self._certificateName = certificateName
+        self._responseCount = 0
+        self.data = data
 
-                si = co.signedInfo
-                si.publisherPublicKeyDigest = key.publicKeyID
-                si.keyLocator = pyccn.KeyLocator(key)
-                si.type = pyccn.CONTENT_DATA
-                si.finalBlockID = pyccn.Name.num2seg(0)
+    def onInterest(self, prefix, interest, transport, registeredPrefixId):
+        self._responseCount += 1
 
-                co.sign(key)
-                return co
+        # Make and sign a Data packet.
+        data = Data(interest.getName())
+        content = self.data#interest.getName().toUri()
+        data.setContent(content)
+        self._keyChain.sign(data, self._certificateName)
+        encodedData = data.wireEncode()
 
-	def upcall(self, kind, info):
-                if kind != pyccn.UPCALL_INTEREST:
-                        return pyccn.RESULT_OK
+        dump("Sent content", content)
+        transport.send(encodedData.toBuffer())
 
-                self.handle.put(self.content) # send the prepared data
-                self.handle.setRunTimeout(0) # finish run() by changing its timeout to 0
+    def onRegisterFailed(self, prefix):
+        self._responseCount += 1
+        dump("Register failed for prefix", prefix.toUri())
 
-                return pyccn.RESULT_INTEREST_CONSUMED
+def status_put(name, data):
+    # The default Face will connect using a Unix socket, or to "localhost".
+    face = Face()
 
-        def start(self):
-		pass
-                # register our name, so upcall is called when interest arrives
-                #self.handle.setInterestFilter(self.name, self)
+    # Use the system default key chain and certificate name to sign commands.
+    keyChain = KeyChain()
+    face.setCommandSigningInfo(keyChain, keyChain.getDefaultCertificateName())
+    
+    # Also use the default certificate name to sign data packets.
+    echo = Echo(keyChain, keyChain.getDefaultCertificateName(), data)
+    prefix = Name(name)
+    dump("Register prefix", prefix.toUri())
+    face.registerPrefix(prefix, echo.onInterest, echo.onRegisterFailed)
+
+    while echo._responseCount < 1:
+        face.processEvents()
+        # We need to sleep for a few milliseconds so we don't use 100% of the CPU.
+        time.sleep(0.01)    
+
+    face.shutdown()
+
 
 ##############################
 # Functions to process data. #
@@ -100,7 +121,7 @@ def prefix_json():
 			if not prefix_timestamp.has_key(prefix):
                                 timestamp = '-'
 			else:
-				timestamp = time.asctime(time.localtime(float(prefix_timestamp[prefix]))) + ' ' + timezone
+				timestamp = prefix_timestamp[prefix]
 
 			publish.append('{"prefix":"' + prefix + '",')
 			publish.append('"timestamp":"' + timestamp + '",')
@@ -113,8 +134,8 @@ def prefix_json():
 	del publish[-1]
 
 	data = ''.join(publish)
-	put = ccnput('/ndn/memphis.edu/internal/status/prefix', data)
-	put.start()
+	status_put('/ndn/memphis.edu/internal/status/prefix', data)  #/ndn/memphis.edu/internal/status/prefix
+	#put.start()
 	del publish[:]
 	print data
 
@@ -127,7 +148,7 @@ def link_json():
 		if not link_timestamp.has_key(router):
 			timestamp = '-'
 		else:
-			timestamp = time.asctime(time.localtime(float(link_timestamp[router]))) + ' ' + timezone
+			timestamp = link_timestamp[router]
 	
 		publish.append('{"router":"' + router + '",')
 		publish.append('"timestamp":"' + timestamp + '",')
@@ -140,6 +161,9 @@ def link_json():
                         	status = 'Offline'
                 	elif topology[router, link] == 'skyblue':
                         	status = 'notintopology'
+
+			#print(link)
+			#print(link_timestamp[link])
 
                 	if status == 'Online' and float(time.time() - (float(link_timestamp[link]))) > 2400:
                         	status = 'Out-of-date'
@@ -154,8 +178,7 @@ def link_json():
 	del publish[-1]
 
 	data = ''.join(publish)
-        put = ccnput('/ndn/memphis.edu/internal/status/link', data)
-        put.start()
+        status_put('/ndn/memphis.edu/internal/status/link', data)
         del publish[:]
 	print data
 
@@ -194,13 +217,15 @@ with open (localdir + '/parse.conf') as f:
 
 curtime = time.asctime(time.localtime(time.time())) + ' ' + timezone
 timestamp = time.asctime(time.localtime(float(lasttimestamp))) + ' ' + timezone
+#timestamp = datetime.datetime.strptime(lasttimestamp,'%Y%m%d%H%M%S%f')
+#timestamp = str(timestamp) + ' ' + timezone
 
 publish.append('{"lastlog":"' + lastfile + '",')
 publish.append('"lasttimestamp":"' + timestamp + '",')
 publish.append('"lastupdated":"' + curtime + '"}')
 data = ''.join(publish)
-put = ccnput('/ndn/memphis.edu/internal/status/metadata', data)
-put.start()
+status_put('/ndn/memphis.edu/internal/status/metadata', data)
+#put.start()
 del publish[:]
 
 
