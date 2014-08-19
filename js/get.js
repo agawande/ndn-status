@@ -1,5 +1,4 @@
 function prefix(str) {
-	console.log("Got data: " + str);
 	// Split up the JSON formatted data
 	var data = str.split("END");
 
@@ -163,6 +162,7 @@ function link(str) {
 }
 
 function validTimestamp(time) {
+	console.log(time);
 	var curTime = new Date().getTime();
 	time = time * 1000;
 	var diff = curTime - time;
