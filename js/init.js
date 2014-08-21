@@ -9,6 +9,7 @@ hostip="titan.cs.memphis.edu";
 pubprefix = "/ndn/memphis.edu/internal/status";
 var ndn;
 var face;
+var completed = false;
 
 console.log("In: " + pubprefix);
 
@@ -80,17 +81,16 @@ $(document).ready(function() {
 	});
   
         face = new Face({host:"titan.cs.memphis.edu", port:8888});
- 
-        $.ajax({
+
+	$.ajax({
 	  url: 'scripts/execute.php',
 	  success: function(data) {
-	    if(data!="ok") { 
+	    if(data!="what") { 
 		$(".loader").fadeOut(500, function() {
                              $('.alert-message')
                                       .append('<div class="alert alert-success">Routing Status loaded <strong>successfully</strong>.</div>')
                                       .fadeIn(500);
                         });
-		//alert('what');
 	    } else {
 		 $(".loader").fadeOut(500, function() {
 				$('.alert-message')
