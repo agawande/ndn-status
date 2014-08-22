@@ -87,11 +87,14 @@ def status_put(name, data):
     prefix = Name(name)
     dump("Register prefix", prefix.toUri())
     face.registerPrefix(prefix, echo.onInterest, echo.onRegisterFailed)
-
+    
+    timeout = time.time() + 6    # wait only 6 seconds for interest, otherwise status page can get old data
     while echo._responseCount < 1:
         face.processEvents()
         # We need to sleep for a few milliseconds so we don't use 100% of the CPU.
-        time.sleep(0.01)    
+        time.sleep(0.01) 
+        if time.time() > timeout:
+           break
 
     face.shutdown()
 
