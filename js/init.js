@@ -3,13 +3,13 @@
 	on the status page
 	
 	Adam Alyyan - aalyyan@memphis.edu
+	Ashlesh Gawande - agawande@memphis.edu
 */
 
 hostip="titan.cs.memphis.edu";
 pubprefix = "/ndn/memphis.edu/internal/status";
 var ndn;
 var face;
-var completed = false;
 
 console.log("In: " + pubprefix);
 
@@ -57,9 +57,7 @@ function onTimeout(interest)
 
 function getStatus(name) {
 	console.log("loading...");
-
 	face.expressInterest(new Name(pubprefix + "/" + name), onData, onTimeout);
-
 }
 
 
@@ -84,7 +82,7 @@ $(document).ready(function() {
 
 	$.ajax({
 	  url: 'scripts/execute.php',
-	  success: function(data) {
+	  success: function(data) {  //script returns what if it fails
 	    if(data!="what") { 
 		$(".loader").fadeOut(500, function() {
                              $('.alert-message')
