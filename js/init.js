@@ -32,10 +32,12 @@ function onData(interest, data) {
                         var s = DataUtils.toString(data.content);
 			console.log("S IS: " + s);
                         prefix(s);
+			getStatus("prefix");
                 } else if (nameStr == "link") {
                         // Grab the JSON content and parse via the link function
                         var s = DataUtils.toString(data.content);
                         link(s);
+			getStatus("link");
                 } else {
                         // Grab the JSON content and update the status information section
                         var data = DataUtils.toString(data.content);
@@ -49,8 +51,8 @@ function onData(interest, data) {
 
 function onTimeout(interest)
     {
-      //console.log("onTimeout called. Re-expressing the interest.");
-      //console.log("Host: " + face.connectionInfo.toString());
+      console.log("onTimeout called. Re-expressing the interest.");
+      console.log("Host: " + face.connectionInfo.toString());
       face.expressInterest(interest, onData, onTimeout);
     }
 
@@ -101,7 +103,7 @@ $(document).ready(function() {
 	  }
 	});
         getStatus("metadata");
-        getStatus("prefix");
-        getStatus("link");
+        //getStatus("prefix");
+        //getStatus("link");
 
 });
