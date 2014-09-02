@@ -11,7 +11,7 @@ from collections import defaultdict
 ################################################
 # Delcaring and initializing needed variables. #
 ################################################
-localdir = '/home/nlsr-status/ndn-status/named'
+localdir = '/home/op_mhoque/nlsr-status/ndn-status/named'
 router_prefixes	 = {}
 prefix_timestamp = {}
 link_timestamp 	 = {}
@@ -127,8 +127,9 @@ for cur in directory:
 			if not line: break
 
 			left, extra, right = line.partition(':')
-			timestamp, extra = left.split(' ', 1)		
-			timestamp = str(time.mktime(datetime.datetime.strptime(timestamp, "%Y%m%d%H%M%S%f").timetuple()))
+			timestamp, extra = left.split(' ', 1)
+			timestamp = timestamp[:13]
+			timestamp = str(time.mktime(datetime.datetime.strptime(timestamp, "%Y%m%d%H%M%S").timetuple()))
 			line = right
 
 			if 'Adding Name Lsa' in line:        #Name-LSA
@@ -141,6 +142,7 @@ for cur in directory:
 						while (not 'name_lsa_end' in line):
 							extra, prefix = line.split('Name 1: ', 1)
 							if router and prefix:
+								#timestamp = str(time.mktime(datetime.datetime.strptime(timestamp, "%Y%m%d%H%M%S%f").timetuple()))
 								if action == 'add':
 									router_prefixes[prefix] = router
 									prefix_timestamp[prefix] = timestamp
@@ -165,6 +167,8 @@ for cur in directory:
 
 				if router and prefix:
 					# Process the action
+					#print(timestamp)
+					#timestamp = str(time.mktime(datetime.datetime.strptime(timestamp, "%Y%m%d%H%M%S%f").timetuple()))
 					if action == 'add':
 						router_prefixes[prefix] = router
 						prefix_timestamp[prefix] = timestamp
@@ -225,7 +229,7 @@ for cur in directory:
 
 					line = (f.readline()).rstrip()
 					if not line: break
-
+				#timestamp = str(time.mktime(datetime.datetime.strptime(timestamp, "%Y%m%d%H%M%S%f").timetuple()))
 				link_timestamp[router] = timestamp
 
 		lasttimestamp = timestamp
@@ -262,3 +266,4 @@ with open (localdir + '/parse.conf', 'w') as f:
 	f.write('lastbyte=' + str(lastbyte) + '\n')
 	f.write('logtag=' + logtag + '\n')
 	f.write('timezone=' + timezone + '\n')
+

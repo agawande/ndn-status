@@ -5,7 +5,7 @@
 # Imports. #
 ############
 import sys
-sys.path.append('/usr/local/lib/python2.7/dist-packages/pyndn')
+sys.path.append('/usr/local/lib/python2.7/dist-packages/PyNDN-2.0a3-py2.7.egg/pyndn')
 import socket
 import time
 import pyndn
@@ -16,11 +16,12 @@ from pyndn.security import KeyChain
 import multiprocessing
 from collections import defaultdict
 import datetime
+import logging
 
 ################################################
 # Delcaring and initializing needed variables. #
 ################################################
-localdir = '/home/ndnuser/named'
+localdir = '/home/op_mhoque/nlsr-status/ndn-status/named'
 
 links_list = []
 publish = []
@@ -34,6 +35,13 @@ set_topology = defaultdict(set)
 router_links  = defaultdict(set)
 router_prefixes	= defaultdict(set)
 
+logging.basicConfig(filename='process.log', level=logging.DEBUG)
+logging.debug('Starting')
+
+face = Face()
+
+g_responseCount = 0
+
 #####################
 # Timeout function. #
 #####################
@@ -43,6 +51,9 @@ def lookup(host, q):
 ###################################
 # pyndn Class to publish content. #
 ###################################
+
+from pyndn.name import Name
+from pyndn.util.common import Common
 
 def dump(*list):
     result = ""
@@ -58,7 +69,11 @@ class Echo(object):
         self.data = data
 
     def onInterest(self, prefix, interest, transport, registeredPrefixId):
+        logging.debug('Received interest')
+
         self._responseCount += 1
+	global g_responseCount 
+	g_responseCount += 1
 
         # Make and sign a Data packet.
         data = Data(interest.getName())
@@ -67,7 +82,7 @@ class Echo(object):
         self._keyChain.sign(data, self._certificateName)
         encodedData = data.wireEncode()
 
-        dump("Sent content", content)
+        #dump("Sent content", content)
         transport.send(encodedData.toBuffer())
 
     def onRegisterFailed(self, prefix):
@@ -75,8 +90,6 @@ class Echo(object):
         dump("Register failed for prefix", prefix.toUri())
 
 def status_put(name, data):
-    # The default Face will connect using a Unix socket, or to "localhost".
-    face = Face()
 
     # Use the system default key chain and certificate name to sign commands.
     keyChain = KeyChain()
@@ -86,18 +99,10 @@ def status_put(name, data):
     echo = Echo(keyChain, keyChain.getDefaultCertificateName(), data)
     prefix = Name(name)
     dump("Register prefix", prefix.toUri())
+    logging.debug('Register prefix ' + prefix.toUri())
+
     face.registerPrefix(prefix, echo.onInterest, echo.onRegisterFailed)
-    
-    timeout = time.time() + 6    # wait only 6 seconds for interest, otherwise status page can get old data
-    while echo._responseCount < 1:
-        face.processEvents()
-        # We need to sleep for a few milliseconds so we don't use 100% of the CPU.
-        time.sleep(0.01) 
-        if time.time() > timeout:
-           break
-
-    face.shutdown()
-
+    face.processEvents()
 
 ##############################
 # Functions to process data. #
@@ -109,6 +114,7 @@ def prefix_json():
 	for router in sorted(search):
 		status = 'Online'
 		prefixes = router_prefixes[router]
+
 
 		publish.append('{"router":"' + router + '",')
 		publish.append('"prefixes":[')
@@ -289,6 +295,16 @@ process_topo()
 prefix_json()
 publish.append("\n")
 link_json()
+
+timeout = time.time() + 6
+while g_responseCount < 3:
+	face.processEvents()
+	# We need to sleep for a few milliseconds so we don't use 100% of the CPU.
+	time.sleep(0.01)
+	if time.time() > timeout:
+		break                                                                                                                                                                       
+                                                                                                                                                                                        
+face.shutdown()
 
 print 'Completed'
 

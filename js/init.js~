@@ -1,0 +1,107 @@
+/*
+	Script used to retrieve status content based on the given names, and update the tables
+	on the status page
+	
+	Adam Alyyan - aalyyan@memphis.edu
+	Ashlesh Gawande - agawande@memphis.edu
+*/
+
+hostip="titan.cs.memphis.edu";
+pubprefix = "/ndn/memphis.edu/internal/status";
+var ndn;
+var face;
+
+console.log("In: " + pubprefix);
+
+// Enables the tabs to work
+$('#myTab a').click(function (e) {
+	e.preventDefault()
+	$(this).tab('show')
+})
+
+function onData(interest, data) {
+	console.log("Got data");
+	console.log(data)
+                //var content = upcallInfo.contentObject;
+		console.log("Name: " + data.name.getName())
+                var nameStr = data.name.getName().split("/").slice(5,6);
+		console.log(nameStr)
+
+                if (nameStr == "prefix") {
+                        // Grab the JSON content and parse via the prefix function
+                        var s = DataUtils.toString(data.content);
+			console.log("S IS: " + s);
+                        prefix(s);
+                } else if (nameStr == "link") {
+                        // Grab the JSON content and parse via the link function
+                        var s = DataUtils.toString(data.content);
+                        link(s);
+                } else {
+                        // Grab the JSON content and update the status information section
+                        var data = DataUtils.toString(data.content);
+                        var obj = jQuery.parseJSON(data);
+
+                        document.getElementById("lastupdated").innerHTML = obj.lastupdated;
+                        document.getElementById("lastlog").innerHTML = obj.lastlog;
+                        document.getElementById("lasttimestamp").innerHTML = obj.lasttimestamp;
+                }
+}
+
+function onTimeout(interest)
+    {
+      //console.log("onTimeout called. Re-expressing the interest.");
+      //console.log("Host: " + face.connectionInfo.toString());
+      face.expressInterest(interest, onData, onTimeout);
+    }
+
+
+function getStatus(name) {
+	console.log("loading...");
+	face.expressInterest(new Name(pubprefix + "/" + name), onData, onTimeout);
+}
+
+
+$(document).ready(function() {
+	var ospfnRunning;
+
+	$.ajax({ url: 'scripts/ospfnCheck.php',
+		 type: 'get',
+		 success: function(output) {
+			
+			output = output.replace(/\s/gm, '');
+
+			if (output === "Down") {
+				ospfnRunning = false;
+			} else {
+				ospfnRunning = true;
+			}
+		 }
+	});
+  
+        face = new Face({host:"titan.cs.memphis.edu", port:8888});
+
+	$.ajax({
+	  url: 'scripts/execute.php',
+	  success: function(data) {  //script returns what if it fails
+	    if(data!="what") { 
+		$(".loader").fadeOut(500, function() {
+                             $('.alert-message')
+                                      .append('<div class="alert alert-success">Routing Status loaded <strong>successfully</strong>.</div>')
+                                      .fadeIn(500);
+                        });
+	    } else {
+		 $(".loader").fadeOut(500, function() {
+				$('.alert-message')
+                                	.append('<div class="alert alert-danger">NDN.js could not establish a connection to Titan. Please check back soon.</div>')
+	                                .fadeIn(500);
+			});
+         
+		console.log("Check that your path is correct in execute.php!");
+	    }
+	  }
+	});
+        getStatus("metadata");
+        getStatus("prefix");
+        getStatus("link");
+
+});
