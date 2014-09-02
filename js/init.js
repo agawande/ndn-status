@@ -32,12 +32,11 @@ function onData(interest, data) {
                         var s = DataUtils.toString(data.content);
 			console.log("S IS: " + s);
                         prefix(s);
-			getStatus("prefix");
+			getStatus("link");
                 } else if (nameStr == "link") {
                         // Grab the JSON content and parse via the link function
                         var s = DataUtils.toString(data.content);
                         link(s);
-			getStatus("link");
                 } else {
                         // Grab the JSON content and update the status information section
                         var data = DataUtils.toString(data.content);
@@ -46,6 +45,7 @@ function onData(interest, data) {
                         document.getElementById("lastupdated").innerHTML = obj.lastupdated;
                         document.getElementById("lastlog").innerHTML = obj.lastlog;
                         document.getElementById("lasttimestamp").innerHTML = obj.lasttimestamp;
+			getStatus("prefix");
                 }
 }
 
@@ -85,7 +85,7 @@ $(document).ready(function() {
 	$.ajax({
 	  url: 'scripts/execute.php',
 	  success: function(data) {  //script returns what if it fails
-	    if(data!="what") { 
+	    if(data!="Success\n") { 
 		$(".loader").fadeOut(500, function() {
                              $('.alert-message')
                                       .append('<div class="alert alert-success">Routing Status loaded <strong>successfully</strong>.</div>')
