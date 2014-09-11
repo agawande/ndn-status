@@ -67,6 +67,7 @@ class StatusServer(object):
         self._keyChain = KeyChain()
         self._certificateName = self._keyChain.getDefaultCertificateName()
         self.registerWithNfd()
+        self.nfdCheck()
 
     def registerWithNfd(self):
         self._face = Face()
@@ -110,6 +111,26 @@ class StatusServer(object):
 
     def onRegisterFailed(self, prefix):
         dump("Register failed for prefix", prefix.toUri())
+
+    def nfdCheck(self):
+	try:
+            try:
+                output=subprocess.check_output('nfd-status | grep memphis.edu/internal', shell=True)
+            except subprocess.CalledProcessError,e:
+                output=e.output
+            #print("output", output)	
+	    if "memphis.edu/internal" not in output:
+	        try:
+                    self.registerWithNfd()
+		    threading.Timer(1, self.nfdCheck).start()
+		    self.run()
+                except:
+	            pass
+            else:
+	         pass
+        except:
+	    pass
+	threading.Timer(1, self.nfdCheck).start()
 
     def run(self):
         while True:
