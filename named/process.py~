@@ -281,7 +281,7 @@ with open (localdir + '/links') as f:
                                 if 'END' in line: break
 
                                 link = line
-                                router_links[router].add(link)
+				router_links[router].add(link)
 
 with open (localdir + '/link_timestamp') as f:
 	for line in f:
