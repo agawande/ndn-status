@@ -1,4 +1,5 @@
 function prefix(str) {
+	//console.log("Got data: " + str);
 	// Split up the JSON formatted data
 	var data = str.split("END");
 
@@ -24,7 +25,10 @@ function prefix(str) {
 	// Cycle through the data
 	for (var i in data) {
 		// Parse the JSON
+                console.log("before: "+data[i]);
 		var obj = jQuery.parseJSON(data[i]);
+                console.log(obj);
+                console.log(data[i]);
 		var row = $('<tr></tr>');
 		var tmp;
 
@@ -112,7 +116,7 @@ function link(str) {
                 // Add the router
                 tmp = $('<td rowspan="' + obj.links.length + '"></td>');
                 tmp.text(obj.router);
-		console.log("Node: " + obj.router)
+		//console.log("Node: " + obj.router)
                 row.append(tmp);
 
 		// Add the timestamp - process via the validTimestamp func
@@ -133,7 +137,7 @@ function link(str) {
 			console.log("\tLink: " + obj.links[k].link)
 
 			var modifier;
-	
+
 			if (obj.timestamp !== "-" && obj.links[k].status !== "Offline" && !validTimestamp(obj.timestamp)) {
 				modifier = "warning";
 				obj.links[k].status = "Out-of-Date";
@@ -162,12 +166,11 @@ function link(str) {
 }
 
 function validTimestamp(time) {
-	console.log(time);
 	var curTime = new Date().getTime();
 	time = time * 1000;
 	var diff = curTime - time;
 
-	console.log(curTime + " : " + time + " : " + diff);
+	//console.log(curTime + " : " + time + " : " + diff);
 
 	if (diff < 2400000) {
 		return true;

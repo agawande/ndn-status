@@ -3,13 +3,13 @@
 	on the status page
 	
 	Adam Alyyan - aalyyan@memphis.edu
-	Ashlesh Gawande - agawande@memphis.edu
 */
 
 hostip="titan.cs.memphis.edu";
 pubprefix = "/ndn/memphis.edu/internal/status";
 var ndn;
 var face;
+var completed = false;
 
 console.log("In: " + pubprefix);
 
@@ -20,27 +20,36 @@ $('#myTab a').click(function (e) {
 })
 
 function onData(interest, data) {
-	console.log("Got data");
-	console.log(data)
+	console.log("Got data for " + interest.getName().toUri());
+        console.log(data.buf().toString('binary'));
+        var contentS = data.buf().toString('binary');
+    	//console.log("Freshness: " + data.getMetaInfo().getFreshnessPeriod());
+	//console.log(data.getContent())
                 //var content = upcallInfo.contentObject;
-		console.log("Name: " + data.name.getName())
-                var nameStr = data.name.getName().split("/").slice(5,6);
-		console.log(nameStr)
+		//console.log("Name: " + data.name.getName());
+                var nameStr = interest.getName().toUri().split("/");
+		nameStr = nameStr[nameStr.length-2]
+		console.log(nameStr);
 
                 if (nameStr == "prefix") {
                         // Grab the JSON content and parse via the prefix function
-                        var s = DataUtils.toString(data.content);
-			console.log("S IS: " + s);
+                        // var s = DataUtils.toString(data.content);
+                        var s = contentS;
+			console.log("Prefix is: " + s);
                         prefix(s);
 			getStatus("link");
                 } else if (nameStr == "link") {
                         // Grab the JSON content and parse via the link function
-                        var s = DataUtils.toString(data.content);
+                        // var s = DataUtils.toString(data.content);
+                        var s = contentS;
+			console.log("Link is: " + s);
                         link(s);
                 } else {
                         // Grab the JSON content and update the status information section
-                        var data = DataUtils.toString(data.content);
+                        // var data = DataUtils.toString(data.content);
+                        var data = contentS;
                         var obj = jQuery.parseJSON(data);
+			console.log("Metadata is: " + obj.lastupdated);
 
                         document.getElementById("lastupdated").innerHTML = obj.lastupdated;
                         document.getElementById("lastlog").innerHTML = obj.lastlog;
@@ -49,17 +58,47 @@ function onData(interest, data) {
                 }
 }
 
-function onTimeout(interest)
-    {
-      console.log("onTimeout called. Re-expressing the interest.");
-      console.log("Host: " + face.connectionInfo.toString());
-      face.expressInterest(interest, onData, onTimeout);
-    }
+function onTimeout(interest) {
+	console.log("Interest timed out: " + interest.getName().toUri());
+	console.log("Host: " + face.connectionInfo.toString());
+
+        console.log("Reexpressing interest for " + interest.getName().toUri());
+
+	SegmentFetcher.fetch(face, interest, SegmentFetcher.DontVerifySegment,
+                         function(content) {
+                           console.log("Got data");
+                           onData(interest, content);
+                         },
+                         function(errorCode, message) {
+	                   console.log("Error #" + errorCode + ": " + message);
+                           //onTimeout(interest);                                                                                                                       
+                         });  
+}
 
 
 function getStatus(name) {
 	console.log("loading...");
-	face.expressInterest(new Name(pubprefix + "/" + name), onData, onTimeout);
+
+	var interest = new Interest(new Name(pubprefix + "/" + name + "/%00%00"));
+
+        console.log("Expressing interest for " + interest.getName().toUri());
+
+	//interest.setMustBeFresh(true);  segment fetcher does this
+
+	//var all-content;
+
+	SegmentFetcher.fetch(face, interest, SegmentFetcher.DontVerifySegment,
+	                     function(content) {
+                               //console.log("----------------------Segment-Fetched-----------------------");
+			       //console.log(content.buf().toString('binary'));
+                               //console.log("----------------------------End-----------------------------");
+	                       onData(interest, content);
+                               //all-content += content;
+	                     },
+	                     function(errorCode, message) {
+                                console.log("Error #" + errorCode + ": " + message);
+	                        //onTimeout(interest);
+	                     });
 }
 
 
@@ -84,8 +123,9 @@ $(document).ready(function() {
 
 	$.ajax({
 	  url: 'scripts/execute.php',
-	  success: function(data) {  //script returns what if it fails
-	    if(data!="Success\n") { 
+	  success: function(data) {
+	    if(data=="Success\n") { 
+		getStatus("metadata");
 		$(".loader").fadeOut(500, function() {
                              $('.alert-message')
                                       .append('<div class="alert alert-success">Routing Status loaded <strong>successfully</strong>.</div>')
@@ -102,7 +142,7 @@ $(document).ready(function() {
 	    }
 	  }
 	});
-        getStatus("metadata");
+        //getStatus("metadata");
         //getStatus("prefix");
         //getStatus("link");
 
