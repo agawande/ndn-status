@@ -28,7 +28,7 @@ Running the scripts
 -------------------
 To run the scripts, simply run:
 
-    ./cgi.sh
+    python status.py
     
 The status data will be generated and published using the prefix you specified, publish_prefix, with the following identifiers added at the end:
 

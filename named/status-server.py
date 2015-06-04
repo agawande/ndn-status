@@ -1,3 +1,4 @@
+
 #!/usr/bin/python
 #coding=utf-8
 
@@ -5,7 +6,7 @@
 # Imports. #
 ############
 import sys
-sys.path.append('/usr/local/lib/python2.7/dist-packages/PyNDN-2.0a3-py2.7.egg/pyndn')
+sys.path.append('/usr/local/lib/python2.7/dist-packages/PyNDN-2.0a3-py2.7.egg/pyndn')  #'/usr/local/lib/python2.7/dist-packages/PyNDN-2.0a3-py2.7.egg/pyndn
 import socket
 import time
 import pyndn
@@ -13,6 +14,7 @@ from pyndn import Face
 from pyndn import Name
 from pyndn import Data
 from pyndn.security import KeyChain
+from pyndn.util import Common
 import multiprocessing
 from collections import defaultdict
 import datetime
@@ -54,24 +56,23 @@ def lookup(host, q):
 # pyndn Class to publish content. #
 ###################################
 
-from pyndn.name import Name
-from pyndn.util.common import Common
-
 def dump(*list):
     result = ""
     for element in list:
         result += (element if type(element) is str else repr(element)) + " "
-    print(result)
+    #print(result)
 
 class StatusServer(object):
     def __init__(self):
+        self._face = Face()
         self._keyChain = KeyChain()
+        #print(dir(self._keyChain))
         self._certificateName = self._keyChain.getDefaultCertificateName()
         self.registerWithNfd()
-        self.nfdCheck()
+        #self.nfdCheck()
 
     def registerWithNfd(self):
-        self._face = Face()
+        #self._face = Face()
         # Use the system default key chain and certificate name to sign commands.
         self._face.setCommandSigningInfo(self._keyChain, self._certificateName)
 
@@ -83,32 +84,85 @@ class StatusServer(object):
 
         logging.debug('Register prefix ' + PREFIX_STATUS_NAME.toUri())
         self._face.registerPrefix(PREFIX_STATUS_NAME, self.onPrefixInterest, self.onRegisterFailed)
-      
-    def onLinkInterest(self, prefix, interest, transport, registeredPrefixId):
+
+    def onLinkInterest(self, prefix, interest, face, registeredPrefixId, filter):
         self._linkData = getLinkData()
         logging.debug('Received interest for Link')
-        self.sendData(prefix, interest, transport, registeredPrefixId, self._linkData)
+        self.sendData(prefix, interest, face, registeredPrefixId, self._linkData)
 
-    def onMetaDataInterest(self, prefix, interest, transport, registeredPrefixId):
+    def onMetaDataInterest(self, prefix, interest, face, registeredPrefixId, filter):
+        print("on meta interest")
+        print("interest rcvd for: ", interest.getName().toUri())
+        print("interest must be fresh value: ", interest.getMustBeFresh())
         processFiles()
         self._metaData = processAndGetMetaData()
         logging.debug('Received interest for Metadata')
-        self.sendData(prefix, interest, transport, registeredPrefixId, self._metaData)
+        self.sendData(prefix, interest, face, registeredPrefixId, self._metaData)
+        print("Data send")
 
-    def onPrefixInterest(self, prefix, interest, transport, registeredPrefixId):
+    def onPrefixInterest(self, prefix, interest, transport, registeredPrefixId, filter):
 
         self._prefixData = getPrefixData()
         logging.debug('Received interest for Prefix')
         self.sendData(prefix, interest, transport, registeredPrefixId, self._prefixData)
 
-    def sendData(self, prefix, interest, transport, registeredPrefixId, content):      #onInterest
-      # Make and sign a Data packet.
-        data = Data(interest.getName())
-        data.setContent(content)
-        self._keyChain.sign(data, self._certificateName)
-        encodedData = data.wireEncode()
+    def sendData(self, prefix, interest, face, registeredPrefixId, content):      #onInterest
 
-        transport.send(encodedData.toBuffer())
+        #transport.send(encodedData.toBuffer())
+	#print(prefix)
+        # Publish segments
+        dataSize = len(content)
+        print("Dat size: ",dataSize)
+        segmentBegin = 0
+        segmentNo = 0
+        print "Start"
+        while segmentBegin < dataSize: 
+            segmentEnd = segmentBegin + 2000 #Common.MAX_NDN_PACKET_SIZE
+
+            if segmentEnd > dataSize:
+                segmentEnd = dataSize
+
+            # Make and sign a Data packet.
+	    print("Prefix: ")
+	    print(prefix)
+            if not "%" in str(prefix)[-7:]:
+                segmentName = prefix
+		#print("NO % in name: ", segmentName)
+                segmentName.appendSegment(segmentNo)
+            else:
+                segmentName = str(prefix)[:-1]
+                #print("% in name: ",segmentName)
+		segmentName += str(segmentNo)
+		segmentName = Name(segmentName)
+            print("Segment Name: ")
+	    print(segmentName)
+
+            print("Segment Name appended: ", segmentName)
+
+            print "Segmenting data from %d to %d" % (segmentBegin, segmentEnd)
+            print("COntent: ")
+            print(content[segmentBegin:segmentEnd])
+
+            data = Data(segmentName)
+            data.setContent(content[segmentBegin:segmentEnd])
+            data.getMetaInfo().setFreshnessPeriod(2000)
+            self._keyChain.sign(data, self._certificateName)
+
+            if segmentEnd >= dataSize:
+              print("yes")
+              data.getMetaInfo().setFinalBlockId(segmentName[-1])
+
+            #encodedData = data.wireEncode()
+
+            segmentBegin = segmentEnd
+
+            print "Sending data " + segmentName.toUri()
+            #transport.send(encodedData.toBuffer())
+            face.putData(data)
+
+            segmentNo += 1
+            time.sleep(0.5)
+        print "Finish"
 
     def onRegisterFailed(self, prefix):
         dump("Register failed for prefix", prefix.toUri())
@@ -119,7 +173,7 @@ class StatusServer(object):
                 output=subprocess.check_output('nfd-status | grep memphis.edu/internal', shell=True)
             except subprocess.CalledProcessError,e:
                 output=e.output
-            #print("output", output)	
+            print("output", output)	
 	    if "memphis.edu/internal" not in output:
 	        try:
                     self.registerWithNfd()
@@ -135,11 +189,13 @@ class StatusServer(object):
 
     def run(self):
         while True:
+            #print("true")
             self._face.processEvents()
             # We need to sleep for a few milliseconds so we don't use 100% of the CPU.
-            time.sleep(0.01)                                                                                                                                                                      
-                                                                                                                                                                                        
-        face.shutdown()
+            time.sleep(0.01)
+
+        self._face.shutdown()
+        
 
 ##############################
 # Functions to process data. #
@@ -181,7 +237,7 @@ def getPrefixData():
   del publish[-1]
 
   data = ''.join(publish)
-  print data
+  #print data
   return data
 
 def getLinkData():
@@ -224,7 +280,7 @@ def getLinkData():
   del publish[-1]
 
   data = ''.join(publish)
-  print data
+  #print data
   return data
 
 def process_topo():
@@ -269,7 +325,7 @@ def processAndGetMetaData():
   publish.append('"lasttimestamp":"' + timestamp + '",')
   publish.append('"lastupdated":"' + curtime + '"}')
   data = ''.join(publish)
-  print data
+  #print data
   return data
 
 
@@ -307,7 +363,7 @@ def processFiles():
     while 1:
             line = (f.readline()).rstrip()
             if not line: break
-
+	    #print line
             if 'Router' in line:
                     extra, router = line.split(':', 1)
                     while not 'END' in line:
@@ -331,4 +387,3 @@ def processFiles():
 if __name__ == "__main__":
   server = StatusServer()
   server.run()
-
